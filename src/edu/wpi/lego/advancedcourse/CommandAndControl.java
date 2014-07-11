@@ -82,9 +82,6 @@ public class CommandAndControl {
     private final BluetoothConnectionManager bcm = new BluetoothConnectionManager();
     private final CommandSender sender = new CommandSender();
 
-    private CountdownTimer sendTimer;
-    private SendEnableManager enableManager;
-
     /**
      * Launch the application.
      */
@@ -146,7 +143,7 @@ public class CommandAndControl {
         modeMenuAdvancedItem.setSelected(true);
         modeGroup.add(modeMenuAdvancedItem);
         mnMode.add(modeMenuAdvancedItem);
-        
+
         frmLegoCommandandcontrol.getContentPane().setLayout(new BorderLayout(0, 0));
 
         JPanel centerPanel = new JPanel();
@@ -230,7 +227,7 @@ public class CommandAndControl {
             String name = prefs.get(PREF_DEVICE_FRIENDLY_NAME, null);
             String addr = prefs.get(PREF_DEVICE_ADDRESS, null);
             if (name != null
-                    && addr != null) {
+                && addr != null) {
                 statusLabel.setText(MessageFormat.format("Disconnected (double-click to connect to {0}:{1})", name, addr));
             }
         }
@@ -277,7 +274,7 @@ public class CommandAndControl {
         horizontalStrut_1.setPreferredSize(new Dimension(5, 0));
 
         final JButton sendButton = new JButton("Send");
-        sendButton.setEnabled(false);
+        sendButton.setEnabled(true);
         sendPane.add(sendButton);
 
         // Handle switching modes
@@ -342,9 +339,9 @@ public class CommandAndControl {
                 } catch (IOException e) {
                     Logger.getLogger(getClass().getName()).log(Level.SEVERE, "Unable to read file", e);
                     JOptionPane.showMessageDialog(frmLegoCommandandcontrol,
-                            "An error occurred while attempting to read the selected file: " + e.getMessage(),
-                            "Unable to Read File",
-                            JOptionPane.ERROR_MESSAGE);
+                                                  "An error occurred while attempting to read the selected file: " + e.getMessage(),
+                                                  "Unable to Read File",
+                                                  JOptionPane.ERROR_MESSAGE);
 
                 }
             }
@@ -530,68 +527,17 @@ public class CommandAndControl {
             addSimpleCommands();
         }
 
-        enableManager = new SendEnableManager(isAllowed -> sendButton.setEnabled(isAllowed));
-
-        sendTimer = new CountdownTimer(20, new CountdownHandler() {
-
-            @Override
-            public void onStart() {
-                enableManager.updateCountdownStatus(true);
-
-                // Show countdown timer
-                timePrefixLabel.setVisible(true);
-                timeLabel.setVisible(true);
-            }
-
-            @Override
-            public void onTick(int remainingSeconds) {
-                int minutes = remainingSeconds / 60;
-                int secondsRemainder = remainingSeconds % 60;
-                timeLabel.setText(String.format("%d:%02d", minutes, secondsRemainder));
-            }
-
-            @Override
-            public void onTimeout() {
-                // Hide countdown timer
-                timePrefixLabel.setVisible(false);
-                timeLabel.setVisible(false);
-
-                enableManager.updateCountdownStatus(false);
-            }
-
-        });
-
-        // Handle connection status
-        bcm.setStatusListener(new StatusListener() {
-
-            @Override
-            public void newStatusDescriptionAvailable(String text) {
-                statusLabel.setText(text);
-            }
-
-            @Override
-            public void connectionEstablished() {
-                enableManager.updateConnectionStatus(true);
-            }
-
-            @Override
-            public void connectionLost() {
-                enableManager.updateConnectionStatus(false);
-
-            }
-        });
-
         // Handle sending messages
         sendButton.addActionListener((ActionEvent e) -> {
             for (Component c : QueuePanel.getComponents()) {
                 QueueRow qrow = (QueueRow) c;
-                sender.queueMessage(qrow.getOpcode());
+                sender.queue(qrow.getOpcode());
                 if (modeMenuAdvancedItem.isSelected()) {
-                    sender.queueMessage(qrow.getOperand());
+                    sender.queue(qrow.getOperand());
                 }
             }
+            sender.flagEndOfAddition();
 
-            sendTimer.resetAndStart();
         });
 
         // Add auto-save on close
@@ -672,7 +618,7 @@ public class CommandAndControl {
      * Applies the given mutator to update the rows of the queue panel.
      *
      * @param mutator The mutator to apply to the rows of the queue panel.
-     * Objects may be cast to QueueRow.
+     *                Objects may be cast to QueueRow.
      */
     private void modifyQueue(ListMutator<Component> mutator) {
         // Save and remove all rows
@@ -697,7 +643,7 @@ public class CommandAndControl {
      *
      * @param destinationFilePath The path at which to save command definitions.
      * @throws IOException Thrown when an unrecoverable I/O error occurs during
-     * the attempt to save.
+     *                     the attempt to save.
      */
     private void saveCommandPalette(String destinationFilePath)
             throws IOException {
@@ -725,10 +671,10 @@ public class CommandAndControl {
      * have been generated by saveCommandPalette() to ensure proper parsing.
      *
      * @param CommandPalettePanel The panel which represents all definitions
-     * (only cleared).
-     * @param filePath The absolute path to the file to load.
+     *                            (only cleared).
+     * @param filePath            The absolute path to the file to load.
      * @throws IOException Thrown when an unrecoverable error occurs when
-     * attempting to load a file.
+     *                     attempting to load a file.
      */
     private void loadCommandPalette(final JPanel CommandPalettePanel, String filePath) throws IOException {
         Yaml y = new Yaml();

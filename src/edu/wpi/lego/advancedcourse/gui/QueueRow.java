@@ -135,7 +135,7 @@ public class QueueRow extends JPanel {
      *
      * @return The operand value for this queue row.
      */
-    public float getOperand() {
-        return ((Number) operandField.getValue()).floatValue();
+    public double getOperand() {
+        return ((Number) operandField.getValue()).doubleValue();
     }
 }

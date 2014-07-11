@@ -5,8 +5,9 @@
  */
 package edu.wpi.lego.advancedcourse;
 
-import java.util.Queue;
-import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * Class responsible for sending commands to the EV3 brick.
@@ -15,36 +16,57 @@ import java.util.concurrent.ConcurrentLinkedQueue;
  */
 public class CommandSender implements Runnable {
 
-    private final Queue<Float> messageQueue = new ConcurrentLinkedQueue<>();
+    private final List<Number> commandQueue = new ArrayList<>();
+    private boolean fullQueue = false;
 
-    public void queueMessage(float numberMessage) {
-        synchronized (messageQueue) {
-            messageQueue.add(numberMessage);
-            messageQueue.notifyAll();
+    public CommandSender() {
+        new Thread(this, "CommandSenderThread").start();
+    }
+
+    /**
+     * Queues the given command. This can be either an opcode or operand.
+     *
+     * @param command
+     */
+    public void queue(Number command) {
+        synchronized (commandQueue) {
+            commandQueue.add(command);
+            commandQueue.notifyAll();
         }
     }
-    
-    public void queueMessage(float... messages) {
-        synchronized(messageQueue) {
-            for(float f : messages) messageQueue.add(f);
-        }
+
+    /**
+     * Notifies this that all commands have been queued and it is now safe to
+     * send them to the robot.
+     */
+    public void flagEndOfAddition() {
+        fullQueue = true;
     }
 
     @Override
     public void run() {
         BackingProgramCommunicator bpc = BackingProgramCommunicator.getInstance();
         while (true) {
-            synchronized (messageQueue) {
-                if (messageQueue.isEmpty()) {
+            synchronized (commandQueue) {
+                if (commandQueue.isEmpty()) {
                     try {
-                        messageQueue.wait();
+                        commandQueue.wait();
                     } catch (InterruptedException ex) {
                     }
                 }
             }
-            Float nextValue = messageQueue.peek();
-            if (nextValue != null) {
-                
+            if (fullQueue) {
+                String message = "";
+                for (Number op : commandQueue) {
+                    if (op instanceof Integer) {
+                        message += " " + op;
+                    } else {
+                        message += ":" + op;
+                    }
+                }
+                bpc.sendMessage(message);
+                commandQueue.clear();
+                fullQueue = false;
             }
         }
     }

@@ -28,7 +28,7 @@ public class BackingProgramCommunicator {
      * the NXT.
      */
 //    public static final String BACKING_PROC_LOC = new File("").getAbsolutePath() + "/TestApplication.exe";
-    public static final String BACKING_PROC_LOC = "C:\\Users\\slcarlberg\\Documents\\Visual Studio 2013\\Projects\\TestApplication\\bin\\Debug\\TestApplication.exe";
+    public static final String BACKING_PROC_LOC = "C:/Users/slcarlberg/Documents/Visual Studio 2013/Projects/TestApplication/bin/Debug/TestApplication.exe";
 
     /**
      * InputStream for data coming from the backing program. Standard output
@@ -45,7 +45,7 @@ public class BackingProgramCommunicator {
     /**
      * InputStream for the backing program's standard error stream.
      */
-    public final InputStream err;
+    public final PrintStream err;
 
     /**
      * The backing process.
@@ -55,37 +55,11 @@ public class BackingProgramCommunicator {
     private final BufferedReader reader;
     private final BufferedWriter writer;
 
-    /*
-     * Command line arguments for the backing executable.
-     */
-    /**
-     * Usage:
-     * <p>
-     * <code>-c [commands...]
-     */
-    public static final String COMMAND = "-c";
-
-    /**
-     * Combine with {@link #CONNECT_ADDR -a} to connect to a robot.<p>
-     * Usage:
-     * <p>
-     * <code>-n name -a addr
-     */
-    public static final String CONNECT_NAME = "-n";
-
-    /**
-     * Combine with {@link #CONNECT_NAME -n} to connect to a robot.<p>
-     * Usage:
-     * <p>
-     * <code>-n name -a addr
-     */
-    public static final String CONNECT_ADDR = "-a";
-    public static final String SCAN = "-s";
     public static final String EXIT = "q";
 
     private final Thread csWriteThread;
     private final Thread csReadThread;
-    
+
     private boolean ev3Connected = false;
 
     /**
@@ -94,11 +68,15 @@ public class BackingProgramCommunicator {
      */
     private BackingProgramCommunicator() {
         try {
-            ProcessBuilder builder = new ProcessBuilder(BACKING_PROC_LOC);
-            proc = builder.start();
-            in = new BufferedInputStream(proc.getInputStream());
-            out = new PrintStream(proc.getOutputStream());
-            err = new BufferedInputStream(proc.getErrorStream());
+//            ProcessBuilder builder = new ProcessBuilder(BACKING_PROC_LOC);
+//            proc = builder.start();
+//            in = new BufferedInputStream(proc.getInputStream());
+//            out = new PrintStream(proc.getOutputStream());
+//            err = new BufferedInputStream(proc.getErrorStream());
+            proc = null;
+            in = System.in;
+            out = System.out;
+            err = System.err;
             reader = new BufferedReader(new InputStreamReader(in));
             writer = new BufferedWriter(new OutputStreamWriter(out));
 
@@ -106,12 +84,8 @@ public class BackingProgramCommunicator {
                 Scanner userInput = new Scanner(System.in);
                 while (true) {
                     if (userInput.hasNext()) {
-                        try {
-                            String input = userInput.nextLine();
-                            sendMessage(input);
-                        } catch (IOException ex) {
-                            Logger.getLogger(BackingProgramCommunicator.class.getName()).log(Level.SEVERE, null, ex);
-                        }
+                        String input = userInput.nextLine();
+                        sendMessage(input);
                     }
                 }
             }, "Java -> C# Write Thread");
@@ -123,14 +97,13 @@ public class BackingProgramCommunicator {
                         if (line == null) {
                             continue;
                         }
-                        System.out.println("C# says: " + line);
+                        handleCSOutput(line);
                     } catch (IOException ex) {
                         break;
                     }
                 }
             });
-        } catch (IOException ex) {
-            Logger.getLogger(BackingProgramCommunicator.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (Exception ex) {
             throw new RuntimeException("Could not start process", ex);
         }
     }
@@ -152,21 +125,49 @@ public class BackingProgramCommunicator {
         bpc.csReadThread.start();
     }
 
-    private void sendMessage(String input) throws IOException {
-        writer.write(input + "\n");
-        writer.flush();
-    }
-    
-    public void sendCommands(int... commands) {
-        for(int cmd : commands) {
-            try {
-                sendMessage(cmd + "");
-            } catch (IOException ex) {
-                Logger.getLogger(BackingProgramCommunicator.class.getName()).log(Level.SEVERE, null, ex);
-            }
+    public void sendMessage(String message) {
+        try {
+            System.out.println("Sending message " + message);
+            writer.write(message + "\n");
+            writer.flush();
+        } catch (IOException ex) {
+            Logger.getLogger(BackingProgramCommunicator.class.getName()).log(Level.SEVERE, null, ex);
         }
     }
-    
+
+    public void sendCommand(int command) {
+        sendCommand((double) command);
+    }
+
+    public void sendCommand(double command) {
+        sendMessage(command + "");
+    }
+
+    public void sendCommands(int... commands) {
+        for (int cmd : commands) {
+            sendCommand(cmd);
+        }
+    }
+
+    /**
+     * Handles the output given by the C# backend.
+     *
+     * @param output the output String
+     */
+    private void handleCSOutput(String output) {
+        switch (output) {
+            case "connected":
+                ev3Connected = true;
+                break;
+            case "disconnected":
+                ev3Connected = false;
+                break;
+            default:
+                break;
+        }
+        System.out.println("C# says: " + output);
+    }
+
     public boolean isEV3Connected() {
         return ev3Connected;
     }
@@ -177,10 +178,10 @@ public class BackingProgramCommunicator {
      */
     public static void reset() throws IOException {
         System.out.println("resetting bpc");
-        instance.writer.write("exit");
+        instance.writer.write(EXIT);
         instance.out.close();
         instance.in.close();
-        instance = null;
+        instance = new BackingProgramCommunicator();
     }
 
 }
