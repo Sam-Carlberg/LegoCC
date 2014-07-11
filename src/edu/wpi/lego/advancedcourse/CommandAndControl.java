@@ -49,7 +49,7 @@ import javax.swing.text.Document;
 
 import org.yaml.snakeyaml.Yaml;
 
-import edu.wpi.lego.advancedcourse.bluetooth.StatusListener;
+import edu.wpi.lego.advancedcourse.bluetooth.ConnectionListener;
 import edu.wpi.lego.advancedcourse.gui.CommandPaletteRow;
 import edu.wpi.lego.advancedcourse.gui.QueueRow;
 import edu.wpi.lego.advancedcourse.models.CommandDefinition;
@@ -536,7 +536,7 @@ public class CommandAndControl {
             }
         });
 
-        bpc.setConnectionListener(new StatusListener() {
+        bpc.setConnectionListener(new ConnectionListener() {
             @Override
             public void newStatusDescriptionAvailable(String text) {
                 statusLabel.setText(text);
@@ -655,10 +655,7 @@ public class CommandAndControl {
         // Update list
         mutator.mutate(rows);
 
-        // Restore all components in the correct order
-        for (Component c : rows) {
-            QueuePanel.add(c);
-        }
+        rows.forEach((c) -> QueuePanel.add(c));
 
         // Redraw
         QueuePanel.revalidate();
@@ -710,9 +707,9 @@ public class CommandAndControl {
 
         PaletteBean pb = y.loadAs(br, PaletteBean.class);
 
-        new HashSet<>(definitionsTable.getTable().entrySet()).stream().forEach(e -> definitionsTable.deleteCommand(e.getKey()));
+        new HashSet<>(definitionsTable.getTable().entrySet()).forEach(e -> definitionsTable.deleteCommand(e.getKey()));
         CommandPalettePanel.removeAll();
 
-        pb.getCommands().stream().forEach(cb -> definitionsTable.createCommand(cb.getOpcode(), cb.getName()));
+        pb.getCommands().forEach(cb -> definitionsTable.createCommand(cb.getOpcode(), cb.getName()));
     }
 }

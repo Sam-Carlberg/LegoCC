@@ -9,7 +9,7 @@ package edu.wpi.lego.advancedcourse.bluetooth;
  *
  * @author slcarlberg
  */
-public interface StatusListener {
+public interface ConnectionListener {
 
     public void newStatusDescriptionAvailable(String text);
 

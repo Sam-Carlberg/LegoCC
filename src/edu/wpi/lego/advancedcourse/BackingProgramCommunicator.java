@@ -5,7 +5,7 @@
  */
 package edu.wpi.lego.advancedcourse;
 
-import edu.wpi.lego.advancedcourse.bluetooth.StatusListener;
+import edu.wpi.lego.advancedcourse.bluetooth.ConnectionListener;
 import java.io.BufferedInputStream;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
@@ -63,11 +63,7 @@ public final class BackingProgramCommunicator {
     private final Thread csReadThread;
 
     private boolean ev3Connected = false;
-
-    /**
-     * *
-     * @throws IOException if the backing program cannot be executed
-     */
+    
     private BackingProgramCommunicator() {
         try {
             ProcessBuilder builder = new ProcessBuilder(BACKING_PROC_LOC);
@@ -97,6 +93,9 @@ public final class BackingProgramCommunicator {
 
     private static BackingProgramCommunicator instance = null;
 
+    /**
+     * Gets the instance.
+     */
     public static BackingProgramCommunicator getInstance() {
         if (instance == null) {
             instance = new BackingProgramCommunicator();
@@ -105,6 +104,11 @@ public final class BackingProgramCommunicator {
         return instance;
     }
 
+    /**
+     * Sends the given message to the backing C# program.
+     *
+     * @param message the message to send
+     */
     public void sendMessage(String message) {
         try {
             writer.write(message + "\n");
@@ -124,14 +128,14 @@ public final class BackingProgramCommunicator {
         switch (output) {
             case CONNECTED:
                 ev3Connected = true;
-                statusListener.connectionEstablished();
+                conListener.connectionEstablished();
                 break;
             case CONNECTION_ERR:
                 JOptionPane.showMessageDialog(null, "Could not connect to EV3", "", JOptionPane.ERROR_MESSAGE, null);
             // purposeful fallthrough
             case DISCONNECTED:
                 ev3Connected = false;
-                statusListener.connectionLost();
+                conListener.connectionLost();
                 break;
             case SEND_SUCCESS:
                 break;
@@ -154,10 +158,13 @@ public final class BackingProgramCommunicator {
         proc.destroy();
     }
 
-    private StatusListener statusListener;
+    private ConnectionListener conListener;
 
-    public void setConnectionListener(StatusListener l) {
-        statusListener = l;
+    /**
+     * Sets the connection listener.
+     */
+    public void setConnectionListener(ConnectionListener l) {
+        conListener = l;
     }
 
 }
