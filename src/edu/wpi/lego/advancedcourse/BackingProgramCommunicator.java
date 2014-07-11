@@ -30,8 +30,7 @@ public final class BackingProgramCommunicator {
      * The location of the executable file responsible for communicating with
      * the NXT.
      */
-//    public static final String BACKING_PROC_LOC = new File("").getAbsolutePath() + "/TestApplication.exe";
-    public static final String BACKING_PROC_LOC = "C:/Users/slcarlberg/Documents/Visual Studio 2013/Projects/TestApplication/bin/Debug/TestApplication.exe";
+    public static final String BACKING_PROC_LOC = "./C#/MailboxSender.exe";
 
     /**
      * InputStream for data coming from the backing program. Standard output

@@ -41,3 +41,4 @@ Icon
 /build/
 /dist/
 *.log
+_configFile

@@ -109,7 +109,7 @@ public class CommandAndControl {
     private void initialize() {
         bpc = BackingProgramCommunicator.getInstance();
         frmLegoCommandandcontrol = new JFrame();
-        frmLegoCommandandcontrol.setTitle("Lego CommandAndControl v0.5");
+        frmLegoCommandandcontrol.setTitle("Lego CommandAndControl");
         frmLegoCommandandcontrol.setBounds(100, 100, 836, 447);
         frmLegoCommandandcontrol.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 
