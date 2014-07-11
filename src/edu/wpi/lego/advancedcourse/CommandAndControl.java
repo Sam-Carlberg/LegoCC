@@ -13,7 +13,6 @@ import java.io.BufferedWriter;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -65,8 +64,6 @@ import java.awt.event.MouseAdapter;
 
 public class CommandAndControl {
 
-    private static final String PREF_DEVICE_ADDRESS = "targetDeviceAddress";
-    private static final String PREF_DEVICE_FRIENDLY_NAME = "targetDeviceFriendlyName";
     private static final String PREF_SAVE_FILE_PATH = "saveFilePath";
     final Preferences prefs = Preferences.userNodeForPackage(getClass());
 
@@ -78,22 +75,23 @@ public class CommandAndControl {
     private CountdownTimer sendTimer;
     private BackingProgramCommunicator bpc;
 
+    private static final Logger root = Logger.getLogger("edu.wpi.lego.advancedcourse");
+
     /**
      * Launch the application.
      */
     public static void main(String[] args) {
         try {
-            Logger root = Logger.getLogger("edu.wpi.lego.advancedcourse");
             root.addHandler(new FileHandler("lego_CnC_errors.log", true));
         } catch (SecurityException | IOException ex) {
-            Logger.getLogger(CommandAndControl.class.getName()).log(Level.SEVERE, "Unable to open log file", ex);
+            root.log(Level.SEVERE, "Unable to open log file", ex);
         }
         EventQueue.invokeLater(() -> {
             try {
                 CommandAndControl window = new CommandAndControl();
                 window.frmLegoCommandandcontrol.setVisible(true);
             } catch (Exception e) {
-                Logger.getLogger(CommandAndControl.class.getName()).log(Level.SEVERE, "Exception encountered during GUI initialization", e);
+                root.log(Level.SEVERE, "Exception encountered during GUI initialization", e);
             }
         });
     }
@@ -301,7 +299,7 @@ public class CommandAndControl {
 
                     prefs.put(PREF_SAVE_FILE_PATH, filePath);
                 } catch (IOException ex) {
-                    Logger.getLogger(getClass().getName()).log(Level.SEVERE, "IO error occurred during save", ex);
+                    root.log(Level.SEVERE, "IO error occurred during save", ex);
                 }
             }
         });
@@ -317,7 +315,7 @@ public class CommandAndControl {
                     loadCommandPalette(commandPalettePanel, filePath);
                     prefs.put(PREF_SAVE_FILE_PATH, filePath);
                 } catch (IOException ex) {
-                    Logger.getLogger(getClass().getName()).log(Level.SEVERE, "Unable to read file", ex);
+                    root.log(Level.SEVERE, "Unable to read file", ex);
                     JOptionPane.showMessageDialog(frmLegoCommandandcontrol,
                             "An error occurred while attempting to read the selected file: " + ex.getMessage(),
                             "Unable to Read File",
@@ -424,7 +422,7 @@ public class CommandAndControl {
                                 try {
                                     cd.setName(d.getText(0, d.getLength()));
                                 } catch (BadLocationException e) {
-                                    Logger.getLogger(CommandAndControl.class.getName()).log(Level.SEVERE, "Unexpected exception", e);
+                                    root.log(Level.SEVERE, "Unexpected exception", e);
                                 }
                             }
                         });
@@ -500,7 +498,7 @@ public class CommandAndControl {
             try {
                 loadCommandPalette(commandPalettePanel, saveFilePath);
             } catch (IOException e1) {
-                Logger.getLogger(getClass().getName()).log(Level.WARNING, "Unable to auto-restore save file", e1);
+                root.log(Level.WARNING, "Unable to auto-restore save file", e1);
                 addSimpleCommands();
             }
         } else {
@@ -596,7 +594,7 @@ public class CommandAndControl {
                                 saveCommandPalette(filePath);
                                 prefs.put(PREF_SAVE_FILE_PATH, filePath);
                             } catch (IOException ex) {
-                                Logger.getLogger(getClass().getName()).log(Level.WARNING, "Unable to auto-save command palette", ex);
+                                root.log(Level.WARNING, "Unable to auto-save command palette", ex);
                             }
                         }
 
@@ -608,7 +606,7 @@ public class CommandAndControl {
                     try {
                         saveCommandPalette(saveFilePath);
                     } catch (IOException e1) {
-                        Logger.getLogger(getClass().getName()).log(Level.WARNING, "Unable to auto-save command palette", e1);
+                        root.log(Level.WARNING, "Unable to auto-save command palette", e1);
                     }
                 }
 
