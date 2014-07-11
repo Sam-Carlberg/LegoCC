@@ -4,7 +4,6 @@ import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.EventQueue;
-import java.awt.SystemColor;
 import java.awt.event.ActionEvent;
 import java.awt.event.MouseEvent;
 import java.awt.event.WindowAdapter;
@@ -50,16 +49,13 @@ import javax.swing.text.Document;
 
 import org.yaml.snakeyaml.Yaml;
 
-import edu.wpi.lego.advancedcourse.CountdownTimer.CountdownHandler;
-import edu.wpi.lego.advancedcourse.bluetooth.BluetoothConnectionManager;
-import edu.wpi.lego.advancedcourse.bluetooth.BluetoothConnectionManager.StatusListener;
+import edu.wpi.lego.advancedcourse.bluetooth.StatusListener;
 import edu.wpi.lego.advancedcourse.gui.CommandPaletteRow;
 import edu.wpi.lego.advancedcourse.gui.QueueRow;
 import edu.wpi.lego.advancedcourse.models.CommandDefinition;
 import edu.wpi.lego.advancedcourse.models.CommandDefinitionsTable;
 import edu.wpi.lego.advancedcourse.models.CommandDefinitionsTable.TableUpdateEvent;
 import edu.wpi.lego.advancedcourse.models.CommandDefinitionsTable.UpdateEventVisitor;
-import edu.wpi.lego.advancedcourse.models.CommandInstance;
 import edu.wpi.lego.advancedcourse.models.commanddefinitionstable.events.CreateCommandEvent;
 import edu.wpi.lego.advancedcourse.models.commanddefinitionstable.events.DeleteCommandEvent;
 import edu.wpi.lego.advancedcourse.models.commanddefinitionstable.events.OpcodeChangedEvent;
@@ -78,9 +74,9 @@ public class CommandAndControl {
     private JPanel QueuePanel;
     private final ButtonGroup modeGroup = new ButtonGroup();
     private final CommandDefinitionsTable definitionsTable = new CommandDefinitionsTable();
-    private final List<CommandInstance> pendingCommands = new ArrayList<>();
-    private final BluetoothConnectionManager bcm = new BluetoothConnectionManager();
-    private final CommandSender sender = new CommandSender();
+    private SendEnableManager enableManager;
+    private CountdownTimer sendTimer;
+    private BackingProgramCommunicator bpc;
 
     /**
      * Launch the application.
@@ -113,6 +109,7 @@ public class CommandAndControl {
      * Initialize the contents of the frame.
      */
     private void initialize() {
+        bpc = BackingProgramCommunicator.getInstance();
         frmLegoCommandandcontrol = new JFrame();
         frmLegoCommandandcontrol.setTitle("Lego CommandAndControl v0.5");
         frmLegoCommandandcontrol.setBounds(100, 100, 836, 447);
@@ -150,32 +147,32 @@ public class CommandAndControl {
         frmLegoCommandandcontrol.getContentPane().add(centerPanel, BorderLayout.CENTER);
         centerPanel.setLayout(new BoxLayout(centerPanel, BoxLayout.X_AXIS));
 
-        JPanel CommandPaletteContainer = new JPanel();
-        CommandPaletteContainer.setBorder(new SoftBevelBorder(BevelBorder.LOWERED, null, null, null, null));
-        centerPanel.add(CommandPaletteContainer);
-        CommandPaletteContainer.setLayout(new BoxLayout(CommandPaletteContainer, BoxLayout.Y_AXIS));
+        JPanel commandPaletteContainer = new JPanel();
+        commandPaletteContainer.setBorder(new SoftBevelBorder(BevelBorder.LOWERED, null, null, null, null));
+        centerPanel.add(commandPaletteContainer);
+        commandPaletteContainer.setLayout(new BoxLayout(commandPaletteContainer, BoxLayout.Y_AXIS));
 
-        JPanel CommandPaletteTitlePanel = new JPanel();
-        CommandPaletteContainer.add(CommandPaletteTitlePanel);
-        CommandPaletteTitlePanel.setLayout(new BoxLayout(CommandPaletteTitlePanel, BoxLayout.X_AXIS));
+        JPanel commandPaletteTitlePanel = new JPanel();
+        commandPaletteContainer.add(commandPaletteTitlePanel);
+        commandPaletteTitlePanel.setLayout(new BoxLayout(commandPaletteTitlePanel, BoxLayout.X_AXIS));
 
-        JLabel lblCommandPalettename = new JLabel("Command Palette (Name, Opcode):");
-        CommandPaletteTitlePanel.add(lblCommandPalettename);
+        JLabel lblCommandPalettename = new JLabel("Command Palette (ID, Name):");
+        commandPaletteTitlePanel.add(lblCommandPalettename);
 
         Component horizontalGlue = Box.createHorizontalGlue();
-        CommandPaletteTitlePanel.add(horizontalGlue);
+        commandPaletteTitlePanel.add(horizontalGlue);
 
-        JScrollPane CommandPaletteScrollPane = new JScrollPane();
-        CommandPaletteScrollPane.setBorder(null);
-        CommandPaletteContainer.add(CommandPaletteScrollPane);
+        JScrollPane commandPaletteScrollPane = new JScrollPane();
+        commandPaletteScrollPane.setBorder(null);
+        commandPaletteContainer.add(commandPaletteScrollPane);
 
-        final JPanel CommandPalettePanel = new JPanel();
-        CommandPalettePanel.setBorder(null);
-        CommandPaletteScrollPane.setViewportView(CommandPalettePanel);
-        CommandPalettePanel.setLayout(new BoxLayout(CommandPalettePanel, BoxLayout.Y_AXIS));
+        final JPanel commandPalettePanel = new JPanel();
+        commandPalettePanel.setBorder(null);
+        commandPaletteScrollPane.setViewportView(commandPalettePanel);
+        commandPalettePanel.setLayout(new BoxLayout(commandPalettePanel, BoxLayout.Y_AXIS));
 
         final JPanel createCommandPanel = new JPanel();
-        CommandPaletteContainer.add(createCommandPanel);
+        commandPaletteContainer.add(createCommandPanel);
         createCommandPanel.setLayout(new BoxLayout(createCommandPanel, BoxLayout.X_AXIS));
 
         JButton btnCreateNewCommand = new JButton("Create New Command");
@@ -184,8 +181,6 @@ public class CommandAndControl {
             while (definitionsTable.getTable().containsKey(i)) {
                 i++;
             }
-
-            // Create it
             definitionsTable.createCommand(i, "");
         });
         createCommandPanel.setVisible(true);
@@ -223,27 +218,12 @@ public class CommandAndControl {
         statusPanel.setLayout(new BoxLayout(statusPanel, BoxLayout.X_AXIS));
 
         final JLabel statusLabel = new JLabel("Disconnected.");
-        {
-            String name = prefs.get(PREF_DEVICE_FRIENDLY_NAME, null);
-            String addr = prefs.get(PREF_DEVICE_ADDRESS, null);
-            if (name != null
-                && addr != null) {
-                statusLabel.setText(MessageFormat.format("Disconnected (double-click to connect to {0}:{1})", name, addr));
-            }
-        }
         statusLabel.addMouseListener(new MouseAdapter() {
             @Override
-            public void mouseClicked(MouseEvent arg0) {
-                if (arg0.getClickCount() == 2) {
-                    if (bcm.isConnected() || bcm.isConnecting()) {
-                        bcm.disconnect();
-                    } else {
-                        String name = prefs.get(PREF_DEVICE_FRIENDLY_NAME, null);
-                        String addr = prefs.get(PREF_DEVICE_ADDRESS, null);
-
-                        if (name != null && addr != null) {
-                            bcm.connect(name, addr);
-                        }
+            public void mouseClicked(MouseEvent e) {
+                if (e.getClickCount() == 2) {
+                    if (!bpc.isEV3Connected()) {
+                        bpc.sendMessage(BackingProgramCommunicator.CONNECT);
                     }
                 }
             }
@@ -274,17 +254,17 @@ public class CommandAndControl {
         horizontalStrut_1.setPreferredSize(new Dimension(5, 0));
 
         final JButton sendButton = new JButton("Send");
-        sendButton.setEnabled(true);
+        sendButton.setEnabled(false);
         sendPane.add(sendButton);
 
         // Handle switching modes
-        modeMenuSimpleItem.addActionListener((ActionEvent e) -> {
+        modeMenuSimpleItem.addActionListener(e -> {
             QueuePanel.removeAll();
 
             new HashSet<>(definitionsTable.getTable().keySet()).stream().forEach((i) -> {
                 definitionsTable.deleteCommand(i);
             });
-            CommandPalettePanel.removeAll();
+            commandPalettePanel.removeAll();
 
             // Hide 'create command' button
             createCommandPanel.setVisible(false);
@@ -292,8 +272,8 @@ public class CommandAndControl {
             addSimpleCommands();
         });
 
-        modeMenuAdvancedItem.addActionListener((ActionEvent e) -> {
-            for (Component c : CommandPalettePanel.getComponents()) {
+        modeMenuAdvancedItem.addActionListener(e -> {
+            for (Component c : commandPalettePanel.getComponents()) {
                 CommandPaletteRow cpr = (CommandPaletteRow) c;
                 cpr.setEditable(true);
             }
@@ -309,7 +289,7 @@ public class CommandAndControl {
         });
 
         // Handle saving and loading
-        mntmSaveAs.addActionListener((ActionEvent e) -> {
+        mntmSaveAs.addActionListener(e -> {
             JFileChooser chooser = new JFileChooser(prefs.get(PREF_SAVE_FILE_PATH, null));
             int retval = chooser.showSaveDialog(frmLegoCommandandcontrol);
             if (retval == JFileChooser.APPROVE_OPTION) {
@@ -326,7 +306,7 @@ public class CommandAndControl {
             }
         });
 
-        mntmLoad.addActionListener((ActionEvent arg0) -> {
+        mntmLoad.addActionListener(e -> {
             JFileChooser chooser = new JFileChooser(prefs.get(PREF_SAVE_FILE_PATH, null));
             int retval = chooser.showOpenDialog(frmLegoCommandandcontrol);
             if (retval == JFileChooser.APPROVE_OPTION) {
@@ -334,26 +314,26 @@ public class CommandAndControl {
                 String filePath = chooser.getSelectedFile().getAbsolutePath();
 
                 try {
-                    loadCommandPalette(CommandPalettePanel, filePath);
+                    loadCommandPalette(commandPalettePanel, filePath);
                     prefs.put(PREF_SAVE_FILE_PATH, filePath);
-                } catch (IOException e) {
-                    Logger.getLogger(getClass().getName()).log(Level.SEVERE, "Unable to read file", e);
+                } catch (IOException ex) {
+                    Logger.getLogger(getClass().getName()).log(Level.SEVERE, "Unable to read file", ex);
                     JOptionPane.showMessageDialog(frmLegoCommandandcontrol,
-                                                  "An error occurred while attempting to read the selected file: " + e.getMessage(),
-                                                  "Unable to Read File",
-                                                  JOptionPane.ERROR_MESSAGE);
+                            "An error occurred while attempting to read the selected file: " + ex.getMessage(),
+                            "Unable to Read File",
+                            JOptionPane.ERROR_MESSAGE);
 
                 }
             }
         });
 
-        definitionsTable.addObserver((Observable o, Object arg) -> {
-            ((TableUpdateEvent) arg).accept(new UpdateEventVisitor() {
+        definitionsTable.addObserver((Observable o, Object tue) -> {
+            ((TableUpdateEvent) tue).accept(new UpdateEventVisitor() {
 
                 @Override
                 public void visit(final OpcodeChangedEvent opcodeChangedEvent) {
                     // Update available opcode choices in palette
-                    for (Component c : CommandPalettePanel.getComponents()) {
+                    for (Component c : commandPalettePanel.getComponents()) {
                         ((CommandPaletteRow) c).releaseOpcode(opcodeChangedEvent.originalOpcode);
                         ((CommandPaletteRow) c).reserveOpcode(opcodeChangedEvent.newOpcode);
                     }
@@ -389,7 +369,7 @@ public class CommandAndControl {
                     modifyQueue(removeAssociatedInstances);
 
                     // Add removed opcode back to all other row's choices
-                    for (Component c : CommandPalettePanel.getComponents()) {
+                    for (Component c : commandPalettePanel.getComponents()) {
                         ((CommandPaletteRow) c).releaseOpcode(deleteCommandEvent.opcode);
                     }
                 }
@@ -398,7 +378,7 @@ public class CommandAndControl {
                 public void visit(final CreateCommandEvent createCommandAction) {
                     final CommandDefinition newDefinition = definitionsTable.getTable().get(createCommandAction.opcode);
                     EventQueue.invokeLater(() -> {
-                        for (Component c : CommandPalettePanel.getComponents()) {
+                        for (Component c : commandPalettePanel.getComponents()) {
                             ((CommandPaletteRow) c).reserveOpcode(createCommandAction.opcode);
                         }
 
@@ -408,16 +388,16 @@ public class CommandAndControl {
                         newRow.setCommandName(createCommandAction.name);
 
                         // Remove all existing opcodes from the new row's choices
-                        for (Component c : CommandPalettePanel.getComponents()) {
+                        for (Component c : commandPalettePanel.getComponents()) {
                             newRow.reserveOpcode(((CommandPaletteRow) c).getOpcode());
                         }
 
                         // Handle removing a command definition
                         newRow.addDeleteListener((ActionEvent e) -> {
                             definitionsTable.deleteCommand(newRow.getOpcode());
-                            CommandPalettePanel.remove(newRow);
-                            CommandPalettePanel.revalidate();
-                            CommandPalettePanel.repaint();
+                            commandPalettePanel.remove(newRow);
+                            commandPalettePanel.revalidate();
+                            commandPalettePanel.repaint();
                         });
 
                         // Handle changing a command's name
@@ -507,8 +487,8 @@ public class CommandAndControl {
                             QueuePanel.revalidate();
                         });
 
-                        CommandPalettePanel.add(newRow);
-                        CommandPalettePanel.revalidate();
+                        commandPalettePanel.add(newRow);
+                        commandPalettePanel.revalidate();
                     });
                 }
             });
@@ -518,7 +498,7 @@ public class CommandAndControl {
         String saveFilePath = prefs.get(PREF_SAVE_FILE_PATH, null);
         if (saveFilePath != null) {
             try {
-                loadCommandPalette(CommandPalettePanel, saveFilePath);
+                loadCommandPalette(commandPalettePanel, saveFilePath);
             } catch (IOException e1) {
                 Logger.getLogger(getClass().getName()).log(Level.WARNING, "Unable to auto-restore save file", e1);
                 addSimpleCommands();
@@ -527,17 +507,63 @@ public class CommandAndControl {
             addSimpleCommands();
         }
 
+        enableManager = new SendEnableManager(isAllowed -> sendButton.setEnabled(isAllowed));
+
+        sendTimer = new CountdownTimer(20, new CountdownTimer.CountdownHandler() {
+
+            @Override
+            public void onStart() {
+                enableManager.updateCountdownStatus(true);
+                // Show countdown timer
+                timePrefixLabel.setVisible(true);
+                timeLabel.setVisible(true);
+            }
+
+            @Override
+            public void onTick(int remainingSeconds) {
+                int minutes = remainingSeconds / 60;
+                int secondsRemainder = remainingSeconds % 60;
+                timeLabel.setText(String.format("%d:%02d", minutes, secondsRemainder));
+            }
+
+            @Override
+            public void onTimeout() {
+                // Hide countdown timer
+                timePrefixLabel.setVisible(false);
+                timeLabel.setVisible(false);
+
+                enableManager.updateCountdownStatus(false);
+            }
+        });
+
+        bpc.setConnectionListener(new StatusListener() {
+            @Override
+            public void newStatusDescriptionAvailable(String text) {
+                statusLabel.setText(text);
+            }
+
+            @Override
+            public void connectionEstablished() {
+                enableManager.updateConnectionStatus(true);
+            }
+
+            @Override
+            public void connectionLost() {
+                enableManager.updateConnectionStatus(false);
+            }
+        });
+
         // Handle sending messages
-        sendButton.addActionListener((ActionEvent e) -> {
+        sendButton.addActionListener(e -> {
             for (Component c : QueuePanel.getComponents()) {
                 QueueRow qrow = (QueueRow) c;
-                sender.queue(qrow.getOpcode());
+                String cmd = qrow.getOpcode() + "";
                 if (modeMenuAdvancedItem.isSelected()) {
-                    sender.queue(qrow.getOperand());
+                    cmd += ":" + qrow.getOperand();
                 }
+                bpc.sendMessage(cmd);
             }
-            sender.flagEndOfAddition();
-
+            sendTimer.resetAndStart();
         });
 
         // Add auto-save on close
@@ -588,6 +614,7 @@ public class CommandAndControl {
 
                 // Close window
                 frmLegoCommandandcontrol.dispose();
+                bpc.exit();
             }
         });
     }
@@ -618,7 +645,7 @@ public class CommandAndControl {
      * Applies the given mutator to update the rows of the queue panel.
      *
      * @param mutator The mutator to apply to the rows of the queue panel.
-     *                Objects may be cast to QueueRow.
+     * Objects may be cast to QueueRow.
      */
     private void modifyQueue(ListMutator<Component> mutator) {
         // Save and remove all rows
@@ -643,7 +670,7 @@ public class CommandAndControl {
      *
      * @param destinationFilePath The path at which to save command definitions.
      * @throws IOException Thrown when an unrecoverable I/O error occurs during
-     *                     the attempt to save.
+     * the attempt to save.
      */
     private void saveCommandPalette(String destinationFilePath)
             throws IOException {
@@ -671,10 +698,10 @@ public class CommandAndControl {
      * have been generated by saveCommandPalette() to ensure proper parsing.
      *
      * @param CommandPalettePanel The panel which represents all definitions
-     *                            (only cleared).
-     * @param filePath            The absolute path to the file to load.
+     * (only cleared).
+     * @param filePath The absolute path to the file to load.
      * @throws IOException Thrown when an unrecoverable error occurs when
-     *                     attempting to load a file.
+     * attempting to load a file.
      */
     private void loadCommandPalette(final JPanel CommandPalettePanel, String filePath) throws IOException {
         Yaml y = new Yaml();

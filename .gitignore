@@ -39,3 +39,5 @@ Icon
 .Spotlight-V100
 .Trashes
 /build/
+/dist/
+*.log

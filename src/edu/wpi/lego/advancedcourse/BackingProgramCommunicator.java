@@ -5,6 +5,7 @@
  */
 package edu.wpi.lego.advancedcourse;
 
+import edu.wpi.lego.advancedcourse.bluetooth.StatusListener;
 import java.io.BufferedInputStream;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
@@ -13,15 +14,17 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.PrintStream;
-import java.util.Scanner;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import javax.swing.JOptionPane;
 
 /**
  *
  * @author slcarlberg
  */
-public class BackingProgramCommunicator {
+public final class BackingProgramCommunicator {
 
     /**
      * The location of the executable file responsible for communicating with
@@ -43,11 +46,6 @@ public class BackingProgramCommunicator {
     public final PrintStream out;
 
     /**
-     * InputStream for the backing program's standard error stream.
-     */
-    public final PrintStream err;
-
-    /**
      * The backing process.
      */
     private final Process proc;
@@ -55,9 +53,13 @@ public class BackingProgramCommunicator {
     private final BufferedReader reader;
     private final BufferedWriter writer;
 
+    public static final String CONNECT = "connect";
+    public static final String CONNECTED = "connected";
+    public static final String DISCONNECTED = "diconnected";
+    public static final String SEND_SUCCESS = "command sent";
+    public static final String CONNECTION_ERR = "could not connect";
     public static final String EXIT = "q";
 
-    private final Thread csWriteThread;
     private final Thread csReadThread;
 
     private boolean ev3Connected = false;
@@ -68,42 +70,27 @@ public class BackingProgramCommunicator {
      */
     private BackingProgramCommunicator() {
         try {
-//            ProcessBuilder builder = new ProcessBuilder(BACKING_PROC_LOC);
-//            proc = builder.start();
-//            in = new BufferedInputStream(proc.getInputStream());
-//            out = new PrintStream(proc.getOutputStream());
-//            err = new BufferedInputStream(proc.getErrorStream());
-            proc = null;
-            in = System.in;
-            out = System.out;
-            err = System.err;
+            ProcessBuilder builder = new ProcessBuilder(BACKING_PROC_LOC);
+            proc = builder.start();
+            in = new BufferedInputStream(proc.getInputStream());
+            out = new PrintStream(proc.getOutputStream());
             reader = new BufferedReader(new InputStreamReader(in));
             writer = new BufferedWriter(new OutputStreamWriter(out));
 
-            this.csWriteThread = new Thread(() -> {
-                Scanner userInput = new Scanner(System.in);
-                while (true) {
-                    if (userInput.hasNext()) {
-                        String input = userInput.nextLine();
-                        sendMessage(input);
-                    }
-                }
-            }, "Java -> C# Write Thread");
-
             csReadThread = new Thread(() -> {
-                while (true) {
-                    try {
-                        String line = reader.readLine();
-                        if (line == null) {
-                            continue;
-                        }
+                String line;
+                try {
+                    while ((line = reader.readLine()) != null) {
                         handleCSOutput(line);
-                    } catch (IOException ex) {
-                        break;
+                    }
+                } catch (IOException ex) {
+                    if (!ex.getMessage().equals("Stream closed")) {
+                        Logger.getLogger(BackingProgramCommunicator.class.getName()).log(Level.SEVERE, null, ex);
                     }
                 }
             });
-        } catch (Exception ex) {
+            csReadThread.setDaemon(true);
+        } catch (IOException ex) {
             throw new RuntimeException("Could not start process", ex);
         }
     }
@@ -113,39 +100,17 @@ public class BackingProgramCommunicator {
     public static BackingProgramCommunicator getInstance() {
         if (instance == null) {
             instance = new BackingProgramCommunicator();
+            instance.csReadThread.start();
         }
         return instance;
     }
 
-    public static void main(String[] args) {
-        System.out.println("Testing BPC");
-        System.out.println(BACKING_PROC_LOC);
-        BackingProgramCommunicator bpc = getInstance();
-        bpc.csWriteThread.start();
-        bpc.csReadThread.start();
-    }
-
     public void sendMessage(String message) {
         try {
-            System.out.println("Sending message " + message);
             writer.write(message + "\n");
             writer.flush();
         } catch (IOException ex) {
             Logger.getLogger(BackingProgramCommunicator.class.getName()).log(Level.SEVERE, null, ex);
-        }
-    }
-
-    public void sendCommand(int command) {
-        sendCommand((double) command);
-    }
-
-    public void sendCommand(double command) {
-        sendMessage(command + "");
-    }
-
-    public void sendCommands(int... commands) {
-        for (int cmd : commands) {
-            sendCommand(cmd);
         }
     }
 
@@ -155,33 +120,44 @@ public class BackingProgramCommunicator {
      * @param output the output String
      */
     private void handleCSOutput(String output) {
+        System.out.println("C#: " + output);
         switch (output) {
-            case "connected":
+            case CONNECTED:
                 ev3Connected = true;
+                statusListener.connectionEstablished();
                 break;
-            case "disconnected":
+            case CONNECTION_ERR:
+                JOptionPane.showMessageDialog(null, "Could not connect to EV3", "", JOptionPane.ERROR_MESSAGE, null);
+            // purposeful fallthrough
+            case DISCONNECTED:
                 ev3Connected = false;
+                statusListener.connectionLost();
                 break;
-            default:
+            case SEND_SUCCESS:
                 break;
         }
-        System.out.println("C# says: " + output);
     }
 
+    /**
+     * Returns a boolean representing the C# backends connection state to the
+     * EV3.
+     */
     public boolean isEV3Connected() {
         return ev3Connected;
     }
 
     /**
-     * Kills the underlying process, closes the input and output streams, and
-     * sets instance to null.
+     * Exits and then kills the underlying process.
      */
-    public static void reset() throws IOException {
-        System.out.println("resetting bpc");
-        instance.writer.write(EXIT);
-        instance.out.close();
-        instance.in.close();
-        instance = new BackingProgramCommunicator();
+    public void exit() {
+        sendMessage(EXIT);
+        proc.destroy();
+    }
+
+    private StatusListener statusListener;
+
+    public void setConnectionListener(StatusListener l) {
+        statusListener = l;
     }
 
 }
