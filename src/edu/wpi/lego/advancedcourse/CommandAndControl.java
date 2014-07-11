@@ -81,11 +81,11 @@ public class CommandAndControl {
      * Launch the application.
      */
     public static void main(String[] args) {
-        try {
-            root.addHandler(new FileHandler("lego_CnC_errors.log", true));
-        } catch (SecurityException | IOException ex) {
-            root.log(Level.SEVERE, "Unable to open log file", ex);
-        }
+//        try {
+//            root.addHandler(new FileHandler("lego_CnC_errors.log", true));
+//        } catch (SecurityException | IOException ex) {
+//            root.log(Level.SEVERE, "Unable to open log file", ex);
+//        }
         EventQueue.invokeLater(() -> {
             try {
                 CommandAndControl window = new CommandAndControl();

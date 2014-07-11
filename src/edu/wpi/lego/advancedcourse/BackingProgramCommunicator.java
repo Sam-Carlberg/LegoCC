@@ -62,7 +62,7 @@ public final class BackingProgramCommunicator {
     private final Thread csReadThread;
 
     private boolean ev3Connected = false;
-    
+
     private BackingProgramCommunicator() {
         try {
             ProcessBuilder builder = new ProcessBuilder(BACKING_PROC_LOC);
@@ -130,7 +130,12 @@ public final class BackingProgramCommunicator {
                 conListener.connectionEstablished();
                 break;
             case CONNECTION_ERR:
-                JOptionPane.showMessageDialog(null, "Could not connect to EV3", "", JOptionPane.ERROR_MESSAGE, null);
+                JOptionPane.showMessageDialog(null,
+                        "Could not find or connect to EV3.\n"
+                        + "Make sure your robot is connected to your computer with Bluetooth",
+                        "Could not connect to EV3",
+                        JOptionPane.ERROR_MESSAGE,
+                        null);
             // purposeful fallthrough
             case DISCONNECTED:
                 ev3Connected = false;
