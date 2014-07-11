@@ -132,7 +132,7 @@ public final class BackingProgramCommunicator {
             case CONNECTION_ERR:
                 JOptionPane.showMessageDialog(null,
                         "Could not find or connect to EV3.\n"
-                        + "Make sure your robot is connected to your computer with Bluetooth",
+                        + "Make sure that your robot is connected to your computer with Bluetooth",
                         "Could not connect to EV3",
                         JOptionPane.ERROR_MESSAGE,
                         null);
