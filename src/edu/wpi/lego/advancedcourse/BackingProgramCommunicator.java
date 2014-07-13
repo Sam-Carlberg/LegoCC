@@ -72,15 +72,18 @@ public final class BackingProgramCommunicator {
             reader = new BufferedReader(new InputStreamReader(in));
             writer = new BufferedWriter(new OutputStreamWriter(out));
 
-            csReadThread = new Thread(() -> {
-                String line;
-                try {
-                    while ((line = reader.readLine()) != null) {
-                        handleCSOutput(line);
-                    }
-                } catch (IOException ex) {
-                    if (!ex.getMessage().equals("Stream closed")) {
-                        Logger.getLogger(BackingProgramCommunicator.class.getName()).log(Level.SEVERE, null, ex);
+            csReadThread = new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    String line;
+                    try {
+                        while ((line = reader.readLine()) != null) {
+                            handleCSOutput(line);
+                        }
+                    } catch (IOException ex) {
+                        if (!ex.getMessage().equals("Stream closed")) {
+                            Logger.getLogger(BackingProgramCommunicator.class.getName()).log(Level.SEVERE, null, ex);
+                        }
                     }
                 }
             });
@@ -124,25 +127,21 @@ public final class BackingProgramCommunicator {
      */
     private void handleCSOutput(String output) {
         System.out.println("C#: " + output);
-        switch (output) {
-            case CONNECTED:
-                ev3Connected = true;
-                conListener.connectionEstablished();
-                break;
-            case CONNECTION_ERR:
-                JOptionPane.showMessageDialog(null,
-                        "Could not find or connect to EV3.\n"
-                        + "Make sure that your robot is connected to your computer with Bluetooth",
-                        "Could not connect to EV3",
-                        JOptionPane.ERROR_MESSAGE,
-                        null);
-            // purposeful fallthrough
-            case DISCONNECTED:
-                ev3Connected = false;
-                conListener.connectionLost();
-                break;
-            case SEND_SUCCESS:
-                break;
+        if (output.equals(CONNECTED)) {
+            ev3Connected = true;
+            conListener.connectionEstablished();
+        } else if (output.equals(CONNECTION_ERR)) {
+            JOptionPane.showMessageDialog(null,
+                    "Could not find or connect to EV3.\n"
+                    + "Make sure that your robot is turned on and paired with your computer",
+                    "Could not connect to EV3",
+                    JOptionPane.ERROR_MESSAGE,
+                    null);
+            ev3Connected = false;
+            conListener.connectionLost();
+        } else if (output.equals(DISCONNECTED)) {
+            ev3Connected = false;
+            conListener.connectionLost();
         }
     }
 
@@ -159,6 +158,11 @@ public final class BackingProgramCommunicator {
      */
     public void exit() {
         sendMessage(EXIT);
+        try {
+            Thread.sleep(50);
+        } catch (InterruptedException ex) {
+            // nobody cares
+        }
         proc.destroy();
     }
 

@@ -1,5 +1,6 @@
 package edu.wpi.lego.advancedcourse;
 
+import edu.wpi.lego.advancedcourse.SendEnableManager.SendStatusHandler;
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Dimension;
@@ -19,7 +20,6 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Observable;
-import java.util.logging.FileHandler;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.prefs.Preferences;
@@ -60,7 +60,11 @@ import edu.wpi.lego.advancedcourse.models.commanddefinitionstable.events.DeleteC
 import edu.wpi.lego.advancedcourse.models.commanddefinitionstable.events.OpcodeChangedEvent;
 import edu.wpi.lego.advancedcourse.yaml.CommandBean;
 import edu.wpi.lego.advancedcourse.yaml.PaletteBean;
+import java.awt.event.ActionListener;
 import java.awt.event.MouseAdapter;
+import java.util.Map.Entry;
+import java.util.Observer;
+import javax.swing.event.ChangeListener;
 
 public class CommandAndControl {
 
@@ -86,12 +90,15 @@ public class CommandAndControl {
 //        } catch (SecurityException | IOException ex) {
 //            root.log(Level.SEVERE, "Unable to open log file", ex);
 //        }
-        EventQueue.invokeLater(() -> {
-            try {
-                CommandAndControl window = new CommandAndControl();
-                window.frmLegoCommandandcontrol.setVisible(true);
-            } catch (Exception e) {
-                root.log(Level.SEVERE, "Exception encountered during GUI initialization", e);
+        EventQueue.invokeLater(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    CommandAndControl window = new CommandAndControl();
+                    window.frmLegoCommandandcontrol.setVisible(true);
+                } catch (Exception e) {
+                    root.log(Level.SEVERE, "Exception encountered during GUI initialization", e);
+                }
             }
         });
     }
@@ -174,12 +181,15 @@ public class CommandAndControl {
         createCommandPanel.setLayout(new BoxLayout(createCommandPanel, BoxLayout.X_AXIS));
 
         JButton btnCreateNewCommand = new JButton("Create New Command");
-        btnCreateNewCommand.addActionListener((ActionEvent e) -> {
-            int i = 0;
-            while (definitionsTable.getTable().containsKey(i)) {
-                i++;
+        btnCreateNewCommand.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                int i = 0;
+                while (definitionsTable.getTable().containsKey(i)) {
+                    i++;
+                }
+                definitionsTable.createCommand(i, "");
             }
-            definitionsTable.createCommand(i, "");
         });
         createCommandPanel.setVisible(true);
         createCommandPanel.add(btnCreateNewCommand);
@@ -256,245 +266,311 @@ public class CommandAndControl {
         sendPane.add(sendButton);
 
         // Handle switching modes
-        modeMenuSimpleItem.addActionListener(e -> {
-            QueuePanel.removeAll();
+        modeMenuSimpleItem.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                QueuePanel.removeAll();
 
-            new HashSet<>(definitionsTable.getTable().keySet()).stream().forEach((i) -> {
-                definitionsTable.deleteCommand(i);
-            });
-            commandPalettePanel.removeAll();
+                for (int i : new HashSet<Integer>(definitionsTable.getTable().keySet())) {
+                    definitionsTable.deleteCommand(i);
+                }
+                commandPalettePanel.removeAll();
 
-            // Hide 'create command' button
-            createCommandPanel.setVisible(false);
+                // Hide 'create command' button
+                createCommandPanel.setVisible(false);
 
-            addSimpleCommands();
+                addSimpleCommands();
+            }
         });
 
-        modeMenuAdvancedItem.addActionListener(e -> {
-            for (Component c : commandPalettePanel.getComponents()) {
-                CommandPaletteRow cpr = (CommandPaletteRow) c;
-                cpr.setEditable(true);
-            }
+        modeMenuAdvancedItem.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                for (Component c : commandPalettePanel.getComponents()) {
+                    CommandPaletteRow cpr = (CommandPaletteRow) c;
+                    cpr.setEditable(true);
+                }
 
-            // Allow user to edit all visible queue rows
-            for (Component c : QueuePanel.getComponents()) {
-                QueueRow qr = (QueueRow) c;
-                qr.setShouldShowOperand(true);
-            }
+                // Allow user to edit all visible queue rows
+                for (Component c : QueuePanel.getComponents()) {
+                    QueueRow qr = (QueueRow) c;
+                    qr.setShouldShowOperand(true);
+                }
 
-            // Enable create new command button
-            createCommandPanel.setVisible(true);
+                // Enable create new command button
+                createCommandPanel.setVisible(true);
+            }
         });
 
         // Handle saving and loading
-        mntmSaveAs.addActionListener(e -> {
-            JFileChooser chooser = new JFileChooser(prefs.get(PREF_SAVE_FILE_PATH, null));
-            int retval = chooser.showSaveDialog(frmLegoCommandandcontrol);
-            if (retval == JFileChooser.APPROVE_OPTION) {
+        mntmSaveAs.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                JFileChooser chooser = new JFileChooser(prefs.get(PREF_SAVE_FILE_PATH, null));
+                int retval = chooser.showSaveDialog(frmLegoCommandandcontrol);
+                if (retval == JFileChooser.APPROVE_OPTION) {
 
-                String filePath = chooser.getSelectedFile().getAbsolutePath();
+                    String filePath = chooser.getSelectedFile().getAbsolutePath();
 
-                try {
-                    saveCommandPalette(filePath);
+                    try {
+                        saveCommandPalette(filePath);
 
-                    prefs.put(PREF_SAVE_FILE_PATH, filePath);
-                } catch (IOException ex) {
-                    root.log(Level.SEVERE, "IO error occurred during save", ex);
+                        prefs.put(PREF_SAVE_FILE_PATH, filePath);
+                    } catch (IOException ex) {
+                        root.log(Level.SEVERE, "IO error occurred during save", ex);
+                    }
                 }
             }
         });
 
-        mntmLoad.addActionListener(e -> {
-            JFileChooser chooser = new JFileChooser(prefs.get(PREF_SAVE_FILE_PATH, null));
-            int retval = chooser.showOpenDialog(frmLegoCommandandcontrol);
-            if (retval == JFileChooser.APPROVE_OPTION) {
+        mntmLoad.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                JFileChooser chooser = new JFileChooser(prefs.get(PREF_SAVE_FILE_PATH, null));
+                int retval = chooser.showOpenDialog(frmLegoCommandandcontrol);
+                if (retval == JFileChooser.APPROVE_OPTION) {
 
-                String filePath = chooser.getSelectedFile().getAbsolutePath();
+                    String filePath = chooser.getSelectedFile().getAbsolutePath();
 
-                try {
-                    loadCommandPalette(commandPalettePanel, filePath);
-                    prefs.put(PREF_SAVE_FILE_PATH, filePath);
-                } catch (IOException ex) {
-                    root.log(Level.SEVERE, "Unable to read file", ex);
-                    JOptionPane.showMessageDialog(frmLegoCommandandcontrol,
-                            "An error occurred while attempting to read the selected file: " + ex.getMessage(),
-                            "Unable to Read File",
-                            JOptionPane.ERROR_MESSAGE);
+                    try {
+                        loadCommandPalette(commandPalettePanel, filePath);
+                        prefs.put(PREF_SAVE_FILE_PATH, filePath);
+                    } catch (IOException ex) {
+                        root.log(Level.SEVERE, "Unable to read file", ex);
+                        JOptionPane.showMessageDialog(frmLegoCommandandcontrol,
+                                "An error occurred while attempting to read the selected file: " + ex.getMessage(),
+                                "Unable to Read File",
+                                JOptionPane.ERROR_MESSAGE);
 
+                    }
                 }
             }
         });
 
-        definitionsTable.addObserver((Observable o, Object tue) -> {
-            ((TableUpdateEvent) tue).accept(new UpdateEventVisitor() {
+        definitionsTable.addObserver(new Observer() {
 
-                @Override
-                public void visit(final OpcodeChangedEvent opcodeChangedEvent) {
-                    // Update available opcode choices in palette
-                    for (Component c : commandPalettePanel.getComponents()) {
-                        ((CommandPaletteRow) c).releaseOpcode(opcodeChangedEvent.originalOpcode);
-                        ((CommandPaletteRow) c).reserveOpcode(opcodeChangedEvent.newOpcode);
-                    }
+            @Override
+            public void update(Observable o, Object arg) {
 
-                    // Update any affected items pending for submission
-                    for (Component c : QueuePanel.getComponents()) {
-                        QueueRow qr = (QueueRow) c;
+                ((TableUpdateEvent) arg).accept(new UpdateEventVisitor() {
 
-                        if (qr.getOpcode() == opcodeChangedEvent.originalOpcode) {
-                            qr.setOpcode(opcodeChangedEvent.newOpcode);
-                        }
-                    }
-                }
-
-                @Override
-                public void visit(final DeleteCommandEvent deleteCommandEvent) {
-                    // Remove all instances of the deleted command
-                    ListMutator<Component> removeAssociatedInstances = (List<Component> list) -> {
-                        Iterator<Component> i = list.iterator();
-
-                        while (i.hasNext()) {
-                            QueueRow qr = (QueueRow) i.next();
-
-                            // If the queued command matches this row's current opcode,
-                            // remove it
-                            if (qr.getOpcode() == deleteCommandEvent.opcode) {
-                                i.remove();
-                            }
-                        }
-                    };
-
-                    // Apply remove operation
-                    modifyQueue(removeAssociatedInstances);
-
-                    // Add removed opcode back to all other row's choices
-                    for (Component c : commandPalettePanel.getComponents()) {
-                        ((CommandPaletteRow) c).releaseOpcode(deleteCommandEvent.opcode);
-                    }
-                }
-
-                @Override
-                public void visit(final CreateCommandEvent createCommandAction) {
-                    final CommandDefinition newDefinition = definitionsTable.getTable().get(createCommandAction.opcode);
-                    EventQueue.invokeLater(() -> {
+                    @Override
+                    public void visit(final OpcodeChangedEvent opcodeChangedEvent) {
+                        // Update available opcode choices in palette
                         for (Component c : commandPalettePanel.getComponents()) {
-                            ((CommandPaletteRow) c).reserveOpcode(createCommandAction.opcode);
+                            ((CommandPaletteRow) c).releaseOpcode(opcodeChangedEvent.originalOpcode);
+                            ((CommandPaletteRow) c).reserveOpcode(opcodeChangedEvent.newOpcode);
                         }
 
-                        // Create new row
-                        final CommandPaletteRow newRow = new CommandPaletteRow(modeMenuAdvancedItem.isSelected());
-                        newRow.setOpcode(createCommandAction.opcode);
-                        newRow.setCommandName(createCommandAction.name);
+                        // Update any affected items pending for submission
+                        for (Component c : QueuePanel.getComponents()) {
+                            QueueRow qr = (QueueRow) c;
 
-                        // Remove all existing opcodes from the new row's choices
-                        for (Component c : commandPalettePanel.getComponents()) {
-                            newRow.reserveOpcode(((CommandPaletteRow) c).getOpcode());
+                            if (qr.getOpcode() == opcodeChangedEvent.originalOpcode) {
+                                qr.setOpcode(opcodeChangedEvent.newOpcode);
+                            }
                         }
+                    }
 
-                        // Handle removing a command definition
-                        newRow.addDeleteListener((ActionEvent e) -> {
-                            definitionsTable.deleteCommand(newRow.getOpcode());
-                            commandPalettePanel.remove(newRow);
-                            commandPalettePanel.revalidate();
-                            commandPalettePanel.repaint();
-                        });
-
-                        // Handle changing a command's name
-                        newRow.addNameChangedListener(new DocumentListener() {
+                    @Override
+                    public void visit(final DeleteCommandEvent deleteCommandEvent) {						// Remove all instances of the deleted command
+                        ListMutator<Component> removeAssociatedInstances = new ListMutator<Component>() {
 
                             @Override
-                            public void removeUpdate(DocumentEvent arg0) {
-                                // Update name
-                                updateCommandName(newDefinition, arg0.getDocument());
-                            }
+                            public void mutate(List<Component> list) {
 
-                            @Override
-                            public void insertUpdate(DocumentEvent arg0) {
-                                // Update name
-                                updateCommandName(newDefinition, arg0.getDocument());
-                            }
+                                Iterator<Component> i = list.iterator();
 
-                            @Override
-                            public void changedUpdate(DocumentEvent arg0) {
-                                // Ignored.
-                            }
+                                while (i.hasNext()) {
+                                    QueueRow qr = (QueueRow) i.next();
 
-                            private void updateCommandName(CommandDefinition cd, Document d) {
-                                try {
-                                    cd.setName(d.getText(0, d.getLength()));
-                                } catch (BadLocationException e) {
-                                    root.log(Level.SEVERE, "Unexpected exception", e);
+                                    // If the queued command matches this row's current opcode,
+                                    // remove it
+                                    if (qr.getOpcode() == deleteCommandEvent.opcode) {
+                                        i.remove();
+                                    }
                                 }
                             }
-                        });
+                        };
 
-                        // Handle changing of opcode values
-                        newRow.addOpcodeChangedListener((ChangeEvent e) -> {
-                            int originalOpcode = newRow.getLastUsedOpcode();
-                            int newOpcode = newRow.getOpcode();
-                            definitionsTable.changeCommandOpcode(originalOpcode, newOpcode);
-                        });
+                        // Apply remove operation
+                        modifyQueue(removeAssociatedInstances);
 
-                        // Handle adding command to queue
-                        newRow.addAddToQueueListener((ActionEvent e) -> {
-                            final QueueRow qrow = new QueueRow(newRow.getOpcode(), modeMenuAdvancedItem.isSelected());
-                            qrow.setName(newRow.getCommandName());
+                        // Add removed opcode back to all other row's choices
+                        for (Component c : commandPalettePanel.getComponents()) {
+                            ((CommandPaletteRow) c).releaseOpcode(deleteCommandEvent.opcode);
+                        }
+                    }
 
-                            // Register row for command definition name change events
-                            newDefinition.addObserver((Observable arg0, Object arg1) -> qrow.setName(((CommandDefinition) arg0).getName()));
+                    @Override
 
-                            // Handle moving this row down
-                            qrow.addMoveDownButtonActionListener((ActionEvent e1) -> {
-                                ListMutator<Component> moveItemDown = (List<Component> list) -> {
-                                    int pos = list.indexOf(qrow);
+                    public void visit(final CreateCommandEvent createCommandAction) {
+                        final CommandDefinition newDefinition = definitionsTable.getTable().get(createCommandAction.opcode);
+                        EventQueue.invokeLater(new Runnable() {
 
-                                    // Move it down
-                                    if (pos < list.size() - 1) {
-                                        list.remove(pos);
-                                        list.add(pos + 1, qrow);
+                            @Override
+                            public void run() {
+
+                                for (Component c : commandPalettePanel.getComponents()) {
+                                    ((CommandPaletteRow) c).reserveOpcode(createCommandAction.opcode);
+                                }
+
+                                // Create new row
+                                final CommandPaletteRow newRow = new CommandPaletteRow(modeMenuAdvancedItem.isSelected());
+                                newRow.setOpcode(createCommandAction.opcode);
+                                newRow.setCommandName(createCommandAction.name);
+
+                                // Remove all existing opcodes from the new row's choices
+                                for (Component c : commandPalettePanel.getComponents()) {
+                                    newRow.reserveOpcode(((CommandPaletteRow) c).getOpcode());
+                                }
+
+                                // Handle removing a command definition
+                                newRow.addDeleteListener(new ActionListener() {
+                                    @Override
+                                    public void actionPerformed(ActionEvent e) {
+                                        definitionsTable.deleteCommand(newRow.getOpcode());
+                                        commandPalettePanel.remove(newRow);
+                                        commandPalettePanel.revalidate();
+                                        commandPalettePanel.repaint();
                                     }
-                                };
+                                });
 
-                                // Apply to the queue
-                                modifyQueue(moveItemDown);
-                            });
+                                // Handle changing a command's name
+                                newRow.addNameChangedListener(new DocumentListener() {
 
-                            // Handle moving this row up
-                            qrow.addMoveUpButtonActionListener((ActionEvent e1) -> {
-                                ListMutator<Component> moveItemUp = (List<Component> list) -> {
-                                    int pos = list.indexOf(qrow);
-
-                                    // Move it up
-                                    if (pos > 0) {
-                                        list.remove(pos);
-                                        list.add(pos - 1, qrow);
+                                    @Override
+                                    public void removeUpdate(DocumentEvent arg0) {
+                                        // Update name
+                                        updateCommandName(newDefinition, arg0.getDocument());
                                     }
-                                };
 
-                                // Apply to the queue
-                                modifyQueue(moveItemUp);
-                            });
+                                    @Override
+                                    public void insertUpdate(DocumentEvent arg0) {
+                                        // Update name
+                                        updateCommandName(newDefinition, arg0.getDocument());
+                                    }
 
-                            // Handle removing this row
-                            qrow.addRemoveButtonActionListener((ActionEvent arg0) -> {
-                                QueuePanel.remove(qrow);
-                                QueuePanel.revalidate();
-                                QueuePanel.repaint();
-                            });
+                                    @Override
+                                    public void changedUpdate(DocumentEvent arg0) {
+                                        // Ignored.
+                                    }
 
-                            QueuePanel.add(qrow);
-                            QueuePanel.revalidate();
+                                    private void updateCommandName(CommandDefinition cd, Document d) {
+                                        try {
+                                            cd.setName(d.getText(0, d.getLength()));
+                                        } catch (BadLocationException e) {
+                                            root.log(Level.SEVERE, "Unexpected exception", e);
+                                        }
+                                    }
+                                });
+
+                                // Handle changing of opcode values
+                                newRow.addOpcodeChangedListener(new ChangeListener() {
+                                    @Override
+                                    public void stateChanged(ChangeEvent e) {
+                                        int originalOpcode = newRow.getLastUsedOpcode();
+                                        int newOpcode = newRow.getOpcode();
+                                        definitionsTable.changeCommandOpcode(originalOpcode, newOpcode);
+                                    }
+                                });
+
+                                // Handle adding command to queue
+                                newRow.addAddToQueueListener(new ActionListener() {
+                                    @Override
+                                    public void actionPerformed(ActionEvent e) {
+                                        final QueueRow qrow = new QueueRow(newRow.getOpcode(), modeMenuAdvancedItem.isSelected());
+                                        qrow.setName(newRow.getCommandName());
+
+                                        // Register row for command definition name change events
+                                        newDefinition.addObserver(new Observer() {
+                                            @Override
+                                            public void update(Observable arg0, Object arg1) {
+                                                // Name changed
+                                                qrow.setName(((CommandDefinition) arg0).getName());
+                                            }
+                                        });
+
+                                        // Handle moving this row down
+                                        qrow.addMoveDownButtonActionListener(new ActionListener() {
+                                            @Override
+                                            public void actionPerformed(ActionEvent e) {
+                                                ListMutator<Component> moveItemDown = new ListMutator<Component>() {
+
+                                                    @Override
+                                                    public void mutate(List<Component> list) {
+                                                        // Find this row's current index
+                                                        int pos = list.indexOf(qrow);
+
+                                                        // Move it down
+                                                        if (pos < list.size() - 1) {
+                                                            list.remove(pos);
+                                                            list.add(pos + 1, qrow);
+                                                        }
+                                                    }
+                                                };
+
+                                                // Apply to the queue
+                                                modifyQueue(moveItemDown);
+                                            }
+                                        });
+
+                                        // Handle moving this row up
+                                        qrow.addMoveUpButtonActionListener(new ActionListener() {
+                                            @Override
+                                            public void actionPerformed(ActionEvent e) {
+                                                // Define the required move up action
+                                                ListMutator<Component> moveItemUp = new ListMutator<Component>() {
+
+                                                    @Override
+                                                    public void mutate(List<Component> list) {
+                                                        // Find this row's current index
+                                                        int pos = list.indexOf(qrow);
+
+                                                        // Move it up
+                                                        if (pos > 0) {
+                                                            list.remove(pos);
+                                                            list.add(pos - 1, qrow);
+                                                        }
+                                                    }
+                                                };
+
+                                                // Apply to the queue
+                                                modifyQueue(moveItemUp);
+                                            }
+                                        });
+
+                                        // Handle removing this row
+                                        qrow.addRemoveButtonActionListener(new ActionListener() {
+                                            @Override
+                                            public void actionPerformed(ActionEvent e) {
+                                                QueuePanel.remove(qrow);
+                                                QueuePanel.revalidate();
+                                                QueuePanel.repaint();
+                                            }
+                                        });
+
+                                        QueuePanel.add(qrow);
+                                        QueuePanel.revalidate();
+                                    }
+
+                                });
+
+                                commandPalettePanel.add(newRow);
+
+                                commandPalettePanel.revalidate();
+                            }
                         });
-
-                        commandPalettePanel.add(newRow);
-                        commandPalettePanel.revalidate();
-                    });
-                }
-            });
-        });
+                    }
+                });
+            }
+        }
+        );
 
         // Auto-restore save file
         String saveFilePath = prefs.get(PREF_SAVE_FILE_PATH, null);
-        if (saveFilePath != null) {
+        if (saveFilePath
+                != null) {
             try {
                 loadCommandPalette(commandPalettePanel, saveFilePath);
             } catch (IOException e1) {
@@ -505,7 +581,12 @@ public class CommandAndControl {
             addSimpleCommands();
         }
 
-        enableManager = new SendEnableManager(isAllowed -> sendButton.setEnabled(isAllowed));
+        enableManager = new SendEnableManager(new SendStatusHandler() {
+            @Override
+            public void sendingEnabledChanged(boolean isAllowed) {
+                sendButton.setEnabled(isAllowed);
+            }
+        });
 
         sendTimer = new CountdownTimer(20, new CountdownTimer.CountdownHandler() {
 
@@ -534,87 +615,99 @@ public class CommandAndControl {
             }
         });
 
-        bpc.setConnectionListener(new ConnectionListener() {
-            @Override
-            public void newStatusDescriptionAvailable(String text) {
-                statusLabel.setText(text);
-            }
+        bpc.setConnectionListener(
+                new ConnectionListener() {
+                    @Override
+                    public void newStatusDescriptionAvailable(String text
+                    ) {
+                        statusLabel.setText(text);
+                    }
 
-            @Override
-            public void connectionEstablished() {
-                enableManager.updateConnectionStatus(true);
-            }
+                    @Override
+                    public void connectionEstablished() {
+                        enableManager.updateConnectionStatus(true);
+                    }
 
-            @Override
-            public void connectionLost() {
-                enableManager.updateConnectionStatus(false);
-            }
-        });
+                    @Override
+                    public void connectionLost() {
+                        enableManager.updateConnectionStatus(false);
+                    }
+                }
+        );
 
         // Handle sending messages
-        sendButton.addActionListener(e -> {
-            for (Component c : QueuePanel.getComponents()) {
-                QueueRow qrow = (QueueRow) c;
-                String cmd = qrow.getOpcode() + "";
-                if (modeMenuAdvancedItem.isSelected()) {
-                    cmd += ":" + qrow.getOperand();
+        sendButton.addActionListener(
+                new ActionListener() {
+                    @Override
+                    public void actionPerformed(ActionEvent e
+                    ) {
+                        for (Component c : QueuePanel.getComponents()) {
+                            QueueRow qrow = (QueueRow) c;
+                            String cmd = qrow.getOpcode() + "";
+                            if (modeMenuAdvancedItem.isSelected()) {
+                                cmd += ":" + qrow.getOperand();
+                            }
+                            bpc.sendMessage(cmd);
+                        }
+                        sendTimer.resetAndStart();
+                    }
                 }
-                bpc.sendMessage(cmd);
-            }
-            sendTimer.resetAndStart();
-        });
+        );
 
         // Add auto-save on close
-        frmLegoCommandandcontrol.addWindowListener(new WindowAdapter() {
+        frmLegoCommandandcontrol.addWindowListener(
+                new WindowAdapter() {
 
-            @Override
-            public void windowClosing(WindowEvent e) {
+                    @Override
+                    public void windowClosing(WindowEvent e
+                    ) {
 
-                // Attempt auto-save
-                String saveFilePath = prefs.get(PREF_SAVE_FILE_PATH, null);
+                        // Attempt auto-save
+                        String saveFilePath = prefs.get(PREF_SAVE_FILE_PATH, null);
 
-                // If no save path exists, pop up message
-                if (saveFilePath == null) {
-                    int n = JOptionPane.showConfirmDialog(
-                            frmLegoCommandandcontrol,
-                            "Would you like to save your command palette?",
-                            "Save Command Palette",
-                            JOptionPane.YES_NO_OPTION);
+                        // If no save path exists, pop up message
+                        if (saveFilePath == null) {
+                            int n = JOptionPane.showConfirmDialog(
+                                    frmLegoCommandandcontrol,
+                                    "Would you like to save your command palette?",
+                                    "Save Command Palette",
+                                    JOptionPane.YES_NO_OPTION);
 
-                    // They would like to save
-                    if (n == JOptionPane.YES_OPTION) {
-                        JFileChooser chooser = new JFileChooser();
-                        int retCode = chooser.showSaveDialog(frmLegoCommandandcontrol);
+                            // They would like to save
+                            if (n == JOptionPane.YES_OPTION) {
+                                JFileChooser chooser = new JFileChooser();
+                                int retCode = chooser.showSaveDialog(frmLegoCommandandcontrol);
 
-                        // They approved a path, use it
-                        if (retCode == JFileChooser.APPROVE_OPTION) {
-                            String filePath = chooser.getSelectedFile().getAbsolutePath();
+                                // They approved a path, use it
+                                if (retCode == JFileChooser.APPROVE_OPTION) {
+                                    String filePath = chooser.getSelectedFile().getAbsolutePath();
 
-                            try {
-                                saveCommandPalette(filePath);
-                                prefs.put(PREF_SAVE_FILE_PATH, filePath);
-                            } catch (IOException ex) {
-                                root.log(Level.WARNING, "Unable to auto-save command palette", ex);
+                                    try {
+                                        saveCommandPalette(filePath);
+                                        prefs.put(PREF_SAVE_FILE_PATH, filePath);
+                                    } catch (IOException ex) {
+                                        root.log(Level.WARNING, "Unable to auto-save command palette", ex);
+                                    }
+                                }
+
                             }
                         }
 
+                        // Save
+                        if (saveFilePath != null) {
+                            try {
+                                saveCommandPalette(saveFilePath);
+                            } catch (IOException e1) {
+                                root.log(Level.WARNING, "Unable to auto-save command palette", e1);
+                            }
+                        }
+
+                        // Close window
+                        frmLegoCommandandcontrol.dispose();
+                        bpc.exit();
                     }
                 }
-
-                // Save
-                if (saveFilePath != null) {
-                    try {
-                        saveCommandPalette(saveFilePath);
-                    } catch (IOException e1) {
-                        root.log(Level.WARNING, "Unable to auto-save command palette", e1);
-                    }
-                }
-
-                // Close window
-                frmLegoCommandandcontrol.dispose();
-                bpc.exit();
-            }
-        });
+        );
     }
 
     /**
@@ -647,13 +740,15 @@ public class CommandAndControl {
      */
     private void modifyQueue(ListMutator<Component> mutator) {
         // Save and remove all rows
-        List<Component> rows = new ArrayList<>(Arrays.asList(QueuePanel.getComponents()));
+        List<Component> rows = new ArrayList<Component>(Arrays.asList(QueuePanel.getComponents()));
         QueuePanel.removeAll();
 
         // Update list
         mutator.mutate(rows);
 
-        rows.forEach((c) -> QueuePanel.add(c));
+        for (Component c : rows) {
+            QueuePanel.add(c);
+        }
 
         // Redraw
         QueuePanel.revalidate();
@@ -673,19 +768,19 @@ public class CommandAndControl {
 
         // Create bean for saving
         PaletteBean pb = new PaletteBean();
-        pb.setCommands(new ArrayList<>());
-        definitionsTable.getTable().entrySet().stream().map((entry) -> {
+        pb.setCommands(new ArrayList<CommandBean>());
+        for (Entry<Integer, CommandDefinition> entry : definitionsTable.getTable().entrySet()) {
             CommandBean cb = new CommandBean();
             cb.setOpcode(entry.getKey());
             cb.setName(entry.getValue().getName());
-            return cb;
-        }).forEach((cb) -> {
             pb.getCommands().add(cb);
-        });
-        // Save bean (open file, do not append)
-        try (BufferedWriter out = new BufferedWriter(new FileWriter(destinationFilePath, false))) {
-            out.write(yaml.dump(pb));
         }
+
+        // Save bean (open file, do not append)
+        BufferedWriter out = new BufferedWriter(new FileWriter(destinationFilePath, false));
+        out.write(yaml.dump(pb));
+        out.close();
+
     }
 
     /**
@@ -705,9 +800,16 @@ public class CommandAndControl {
 
         PaletteBean pb = y.loadAs(br, PaletteBean.class);
 
-        new HashSet<>(definitionsTable.getTable().entrySet()).forEach(e -> definitionsTable.deleteCommand(e.getKey()));
+        // Clear definition table
+        for (Entry<Integer, CommandDefinition> e : new HashSet<Entry<Integer, CommandDefinition>>(definitionsTable.getTable().entrySet())) {
+            definitionsTable.deleteCommand(e.getKey());
+        }
         CommandPalettePanel.removeAll();
 
-        pb.getCommands().forEach(cb -> definitionsTable.createCommand(cb.getOpcode(), cb.getName()));
+        // Load all definitions from file
+        for (CommandBean cb : pb.getCommands()) {
+            definitionsTable.createCommand(cb.getOpcode(), cb.getName());
+        }
+
     }
 }

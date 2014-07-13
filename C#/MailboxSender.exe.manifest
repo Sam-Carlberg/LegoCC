@@ -42,6 +42,18 @@
     </dependentAssembly>
   </dependency>
   <dependency>
+    <dependentAssembly dependencyType="install" allowDelayedBinding="true" codebase="EV3MessengerLib.dll" size="15360">
+      <assemblyIdentity name="EV3MessengerLib" version="1.0.0.0" language="neutral" processorArchitecture="msil" />
+      <hash>
+        <dsig:Transforms>
+          <dsig:Transform Algorithm="urn:schemas-microsoft-com:HashTransforms.Identity" />
+        </dsig:Transforms>
+        <dsig:DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1" />
+        <dsig:DigestValue>vxb6FofCGS4DWv/7sh5aqDpGgB0=</dsig:DigestValue>
+      </hash>
+    </dependentAssembly>
+  </dependency>
+  <dependency>
     <dependentAssembly dependencyType="install" allowDelayedBinding="true" codebase="LibUsbDotNet.dll" size="150016">
       <assemblyIdentity name="LibUsbDotNet" version="2.2.8.104" language="neutral" processorArchitecture="msil" />
       <hash>
@@ -61,7 +73,7 @@
           <dsig:Transform Algorithm="urn:schemas-microsoft-com:HashTransforms.Identity" />
         </dsig:Transforms>
         <dsig:DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1" />
-        <dsig:DigestValue>qLrg4dVLJhI49SuEjfOOUqAjlnE=</dsig:DigestValue>
+        <dsig:DigestValue>+H3o2LESDKE7h2fBzdEsHl7QjAw=</dsig:DigestValue>
       </hash>
     </dependentAssembly>
   </dependency>
